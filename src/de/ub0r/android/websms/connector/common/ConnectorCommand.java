@@ -61,6 +61,10 @@ public final class ConnectorCommand implements Cloneable {
 	/** Command: selected SubConnectorSpec for sending. */
 	private static final String SELECTEDSUBCONNECTOR = // .
 	"command_selectedsubconnector";
+	/** Command: file name. */
+	private static final String FILE_NAME = "command_filename";
+	/** Command: file byte array. */
+	private static final String FILE_BYTE_ARRAY = "command_fileByteArray";
 
 	/** {@link Bundle} represents the ConnectorSpec. */
 	private final Bundle bundle;
@@ -128,7 +132,7 @@ public final class ConnectorCommand implements Cloneable {
 			final boolean flashSMS, final long timestamp,
 			final String customSender) {
 		ConnectorCommand ret = send(selectedSubConnector, defPrefix, defSender,
-				recipients, text, flashSMS);
+				recipients, text, flashSMS, null, null);
 		ret.setSendLater(timestamp);
 		ret.setCustomSender(customSender);
 		return ret;
@@ -153,8 +157,10 @@ public final class ConnectorCommand implements Cloneable {
 	 */
 	public static ConnectorCommand send(final String selectedSubConnector,
 			final String defPrefix, final String defSender,
-			final String[] recipients, final String text, // .
-			final boolean flashSMS) {
+			final String[] recipients,
+			final String text, // .
+			final boolean flashSMS, final String fileName,
+			final byte[] fileByteArray) {
 		final Bundle b = new Bundle();
 		b.putShort(TYPE, TYPE_SEND);
 		b.putString(SELECTEDSUBCONNECTOR, selectedSubConnector);
@@ -175,6 +181,9 @@ public final class ConnectorCommand implements Cloneable {
 		b.putBoolean(FLASHSMS, flashSMS);
 		b.putLong(TIMESTAMP, -1);
 		b.putString(CUSTOMSENDER, null);
+		b.putString(FILE_NAME, fileName);
+		b.putByteArray(FILE_BYTE_ARRAY, fileByteArray);
+
 		return new ConnectorCommand(b);
 	}
 
@@ -411,4 +420,23 @@ public final class ConnectorCommand implements Cloneable {
 		final short s2 = b2.getShort(TYPE);
 		return s1 == s2;
 	}
+
+	/**
+	 * Set mms picture filename
+	 * 
+	 * @return
+	 */
+	public String getFileName() {
+		return this.bundle.getString(FILE_NAME);
+	}
+
+	/**
+	 * Set mms picture as fileByteArray
+	 * 
+	 * @return
+	 */
+	public byte[] getFileByteArray() {
+		return this.bundle.getByteArray(FILE_BYTE_ARRAY);
+	}
+
 }

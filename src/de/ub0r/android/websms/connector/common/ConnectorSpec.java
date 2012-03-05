@@ -110,6 +110,8 @@ public final class ConnectorSpec implements Serializable {
 	private static final String AD_UNITID = "ad_unitid";
 	/** Connector: selected subconnector. */
 	private static final String SELECTED_SUBCONECTOR = "sub_selected";
+	/** Connector supports MMS. */
+	private static final String MMS_ENABLED = "mms_enabled";
 
 	// Subconnectors
 	/** Connector: SubConnector prefix. */
@@ -119,6 +121,8 @@ public final class ConnectorSpec implements Serializable {
 
 	/** Previous set balance. */
 	private String oldBalance = null;
+
+	private boolean mmsEnabled;
 
 	/**
 	 * {@link SubConnectorSpec} presents all necessary informations to use a
@@ -159,7 +163,7 @@ public final class ConnectorSpec implements Serializable {
 		 *            {@link Bundle}
 		 */
 		SubConnectorSpec(final Bundle b) {
-			Log.d(TAG, "new SubConnectorSpec(" + bundle + ")");
+			Log.d(TAG, "new SubConnectorSpec(" + this.bundle + ")");
 			this.bundle = b;
 		}
 
@@ -323,6 +327,7 @@ public final class ConnectorSpec implements Serializable {
 		stream.writeInt(this.getCapabilities());
 		stream.writeInt(this.getStatus());
 		stream.writeInt(this.getLimitLength());
+		stream.writeBoolean(this.isMmsEnabled());
 		writeString(stream, this.getValidCharacters());
 		writeString(stream, this.getAdUnitIds());
 		Log.d(TAG, "write selected SubConnector..");
@@ -367,6 +372,7 @@ public final class ConnectorSpec implements Serializable {
 		this.bundle.putString(VALID_CHARACTERS, readString(stream));
 		this.bundle.putString(AD_UNITID, readString(stream));
 		this.bundle.putString(SELECTED_SUBCONECTOR, readString(stream));
+		this.bundle.putBoolean(MMS_ENABLED, stream.readBoolean());
 		final int c = stream.readInt();
 		for (int i = 0; i < c; i++) {
 			this.addSubConnector((SubConnectorSpec) stream.readObject());
@@ -985,6 +991,20 @@ public final class ConnectorSpec implements Serializable {
 		}
 	}
 
+	public boolean isMmsEnabled() {
+		if (this.bundle == null) {
+			return false;
+		}
+		return this.bundle.getBoolean(MMS_ENABLED);
+	}
+
+	public void setMmsEnabled(final boolean isMmsEnabled) {
+		if (this.bundle == null) {
+			return;
+		}
+		this.bundle.putBoolean(MMS_ENABLED, isMmsEnabled);
+	}
+
 	/**
 	 * @return selected {@link SubConnectorSpec}
 	 */
@@ -1013,7 +1033,7 @@ public final class ConnectorSpec implements Serializable {
 	 *            id of selected {@link SubConnectorSpec}
 	 */
 	public void setSelectedSubConnector(final String id) {
-		if (bundle != null) {
+		if (this.bundle != null) {
 			this.bundle.putString(SELECTED_SUBCONECTOR, id);
 		}
 	}
@@ -1025,7 +1045,7 @@ public final class ConnectorSpec implements Serializable {
 	 */
 	public SubConnectorSpec[] getSubConnectors() {
 		Log.d(TAG, "getSubConnectors()");
-		Log.d(TAG, "getSubConnectors(): bundle=" + bundle);
+		Log.d(TAG, "getSubConnectors(): bundle=" + this.bundle);
 		if (this.bundle == null) {
 			return null;
 		}

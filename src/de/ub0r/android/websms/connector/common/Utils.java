@@ -20,6 +20,7 @@
 package de.ub0r.android.websms.connector.common;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -28,6 +29,7 @@ import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
 
@@ -43,12 +45,16 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.conn.scheme.PlainSocketFactory;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.cookie.Cookie;
 import org.apache.http.entity.HttpEntityWrapper;
 import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.message.BasicHeader;
@@ -57,6 +63,7 @@ import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.HTTP;
 import org.apache.http.protocol.HttpContext;
+import org.apache.james.mime4j.util.CharsetUtil;
 import org.json.JSONObject;
 
 import android.app.Notification;
@@ -1132,4 +1139,145 @@ public final class Utils {
 				.getSystemService(Context.NOTIFICATION_SERVICE);
 		nm.notify(0, n);
 	}
+
+	/**
+	 * Get a fresh HTTP-Connection for sending MMS (*.jpeg)
+	 * 
+	 * @param url
+	 *            URL to open
+	 * @param cookies
+	 *            cookies to transmit
+	 * @param postData
+	 *            post data
+	 * @param userAgent
+	 *            user agent
+	 * @param referer
+	 *            referer
+	 * @param encoding
+	 *            encoding; default encoding: ISO-8859-15
+	 * @param trustAll
+	 *            trust all SSL certificates; only used on first call!
+	 * @param fileName
+	 *            the MMS fileName
+	 * @param fileByteArray
+	 *            the MMS file (.jpg)
+	 * @param knownFingerprints
+	 *            fingerprints that are known to be valid; only used on first
+	 *            call! Only used if {@code trustAll == false}
+	 * @return the connection
+	 * @throws IOException
+	 *             IOException
+	 */
+	public static HttpResponse getHttpClientPostMMS(final String url,
+			final ArrayList<Cookie> cookies,
+			final List<BasicNameValuePair> postData, final String userAgent,
+			final String referer, final String encoding,
+			final boolean trustAll, final String fileName,
+			final byte[] fileByteArray, final String... knownFingerprints)
+			throws IOException {
+		Log.d(TAG, "HTTPClient URL: " + url);
+
+		SchemeRegistry registry = null;
+		if (httpClient == null) {
+			if (trustAll || (// .
+					knownFingerprints != null && // .
+					knownFingerprints.length > 0)) {
+				registry = new SchemeRegistry();
+				registry.register(new Scheme("http", new PlainSocketFactory(),
+						PORT_HTTP));
+				final FakeSocketFactory httpsSocketFactory;
+				if (trustAll) {
+					httpsSocketFactory = new FakeSocketFactory();
+				} else {
+					httpsSocketFactory = new FakeSocketFactory(
+							knownFingerprints);
+				}
+				registry.register(new Scheme("https", httpsSocketFactory,
+						PORT_HTTPS));
+				HttpParams params = new BasicHttpParams();
+				httpClient = new DefaultHttpClient(
+						new ThreadSafeClientConnManager(params, registry),
+						params);
+			} else {
+				httpClient = new DefaultHttpClient();
+			}
+			httpClient.addResponseInterceptor(new HttpResponseInterceptor() {
+				public void process(final HttpResponse response,
+						final HttpContext context) throws HttpException,
+						IOException {
+					HttpEntity entity = response.getEntity();
+					Header contentEncodingHeader = entity.getContentEncoding();
+					if (contentEncodingHeader != null) {
+						HeaderElement[] codecs = contentEncodingHeader
+								.getElements();
+						for (int i = 0; i < codecs.length; i++) {
+							if (codecs[i].getName().equalsIgnoreCase(GZIP)) {
+								response.setEntity(new GzipDecompressingEntity(
+										response.getEntity()));
+								return;
+							}
+						}
+					}
+				}
+			});
+		}
+		if (cookies != null && cookies.size() > 0) {
+			final int l = cookies.size();
+			CookieStore cs = httpClient.getCookieStore();
+			for (int i = 0; i < l; i++) {
+				cs.addCookie(cookies.get(i));
+			}
+		}
+		Log.d(TAG, getCookies(httpClient));
+
+		HttpRequestBase request = null;
+		HttpPost pr = new HttpPost(url);
+
+		if (encoding != null && encoding.length() > 0) {
+			URLEncodedUtils.format(postData, encoding);
+			Log.d(TAG, "encoding=" + encoding + " / postData=" + postData);
+		} else {
+			URLEncodedUtils.format(postData, "ISO-8859-15");
+			Log.d(TAG, "encoding=Standard ISO-8859-15" + encoding
+					+ " / postData=" + postData);
+		}
+		Log.d(TAG, "encoded postData=" + postData);
+
+		MultipartEntity mpe = new MultipartEntity(
+				HttpMultipartMode.BROWSER_COMPATIBLE, "-----123456789",
+				CharsetUtil.UTF_8);
+
+		for (Iterator<BasicNameValuePair> iter = postData.iterator(); iter
+				.hasNext();) {
+			BasicNameValuePair bnvp = iter.next();
+			StringBody sb = new StringBody(bnvp.getValue(),
+					"multipart/form-data", CharsetUtil.UTF_8);
+
+			mpe.addPart(bnvp.getName(), sb);
+		}
+
+		if (fileByteArray != null) {
+			mpe.addPart("mmsAttachment", new InputSreamKnownFileSize(
+					new ByteArrayInputStream(fileByteArray),
+					fileByteArray.length, "image/jpeg", fileName));
+		}
+
+		pr.setEntity(mpe);
+		request = pr;
+
+		request.addHeader(ACCEPT_ENCODING, GZIP);
+		if (referer != null) {
+			request.setHeader("Referer", referer);
+			// Log.d(TAG, "HTTPClient REF: " + referer);
+		}
+		if (userAgent != null) {
+			request.setHeader("User-Agent", userAgent);
+			// Log.d(TAG, "HTTPClient AGENT: " + userAgent);
+		}
+
+		// Log.d(TAG, "********* HEADERS: " + getHeaders(request));
+
+		return httpClient.execute(request);
+	}
+
 }
